@@ -2,6 +2,9 @@ import jp.co.soramitsu.iroha2.*
 import jp.co.soramitsu.iroha2.generated.crypto.PublicKey
 import jp.co.soramitsu.iroha2.generated.datamodel.Value
 import jp.co.soramitsu.iroha2.generated.datamodel.account.AccountId
+import jp.co.soramitsu.iroha2.generated.datamodel.asset.AssetValue
+import jp.co.soramitsu.iroha2.generated.datamodel.asset.AssetValueType
+import jp.co.soramitsu.iroha2.generated.datamodel.asset.Mintable
 import jp.co.soramitsu.iroha2.generated.datamodel.metadata.Metadata
 import jp.co.soramitsu.iroha2.generated.datamodel.name.Name
 import jp.co.soramitsu.iroha2.generated.datamodel.predicate.GenericValuePredicateBox
@@ -30,8 +33,16 @@ fun main(args: Array<String>): Unit = runBlocking{
     sendTransaction.registerAccount(joe, listOf(joeKeyPair.public.toIrohaPublicKey()))
         .also { println("ACCOUNT $joe CREATED") }
 
-    query.findAllAccounts()
-        .also { println("ALL ACCOUNTS: ${it.map { a -> a.id.asString() }}") }
+    val assetDefinition = "asset_${System.currentTimeMillis()}$ASSET_ID_DELIMITER$domain"
+    sendTransaction.registerAssetDefinition(assetDefinition, AssetValueType.Quantity())
+        .also { println("ASSET DEFINITION $assetDefinition CREATED") }
+
+    val joeAsset = "$assetDefinition$ASSET_ID_DELIMITER$joe"
+    sendTransaction.registerAsset(joeAsset, AssetValue.Quantity(100))
+        .also { println("ASSET $joeAsset CREATED") }
+
+    query.findAllAssets()
+        .also { println("ALL ASSETS: ${it.map { a -> a.id.asString() }}") }
 
 }
 
@@ -73,6 +84,38 @@ open class SendTransaction (peerUrl: String,
             withTimeout(timeout) { it.await() }
         }
     }
+
+    suspend fun registerAssetDefinition(
+        id: String,
+        type: AssetValueType = AssetValueType.Store(),
+        metadata: Map<Name, Value> = mapOf(),
+        mintable: Mintable = Mintable.Infinitely(),
+        admin: AccountId = this.admin,
+        keyPair: KeyPair = this.keyPair
+    ) {
+        client.sendTransaction {
+            account(admin)
+            this.registerAssetDefinition(id.asAssetDefinitionId(), type, Metadata(metadata), mintable)
+            buildSigned(keyPair)
+        }.also {
+            withTimeout(timeout) { it.await() }
+        }
+    }
+
+    suspend fun registerAsset(
+        id: String,
+        value: AssetValue,
+        admin: AccountId = this.admin,
+        keyPair: KeyPair = this.keyPair
+    ) {
+        client.sendTransaction {
+            account(admin)
+            this.registerAsset(id.asAssetId(), value)
+            buildSigned(keyPair)
+        }.also {
+            withTimeout(timeout) { it.await() }
+        }
+    }
 }
 
 open class Query (peerUrl: String,
@@ -82,8 +125,8 @@ open class Query (peerUrl: String,
 
     private val client = AdminIroha2Client(URL(peerUrl), URL(telemetryUrl), log = true)
 
-    suspend fun findAllAccounts(queryFilter: GenericValuePredicateBox<ValuePredicate>? = null) = QueryBuilder
-        .findAllAccounts(queryFilter)
+    suspend fun findAllAssets(queryFilter: GenericValuePredicateBox<ValuePredicate>? = null) = QueryBuilder
+        .findAllAssets(queryFilter)
         .account(admin)
         .buildSigned(keyPair)
         .let { client.sendQuery(it) }
