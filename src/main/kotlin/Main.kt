@@ -4,6 +4,9 @@ import jp.co.soramitsu.iroha2.generated.datamodel.Value
 import jp.co.soramitsu.iroha2.generated.datamodel.account.AccountId
 import jp.co.soramitsu.iroha2.generated.datamodel.metadata.Metadata
 import jp.co.soramitsu.iroha2.generated.datamodel.name.Name
+import jp.co.soramitsu.iroha2.generated.datamodel.predicate.GenericValuePredicateBox
+import jp.co.soramitsu.iroha2.generated.datamodel.predicate.value.ValuePredicate
+import jp.co.soramitsu.iroha2.query.QueryBuilder
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.net.URL
@@ -17,6 +20,7 @@ fun main(args: Array<String>): Unit = runBlocking{
                                       "9ac47abf59b356e0bd7dcbbbb4dec080e302156a48ca907e47cb6aea1d32719e")
 
     val sendTransaction = SendTransaction(peerUrl, telemetryUrl, admin, adminKeyPair)
+    val query = Query (peerUrl, telemetryUrl, admin, adminKeyPair)
 
     val domain = "domain_${System.currentTimeMillis()}"
     sendTransaction.registerDomain(domain).also { println("DOMAIN $domain CREATED") }
@@ -25,6 +29,9 @@ fun main(args: Array<String>): Unit = runBlocking{
     val joeKeyPair = generateKeyPair()
     sendTransaction.registerAccount(joe, listOf(joeKeyPair.public.toIrohaPublicKey()))
         .also { println("ACCOUNT $joe CREATED") }
+
+    query.findAllAccounts()
+        .also { println("ALL ACCOUNTS: ${it.map { a -> a.id.asString() }}") }
 
 }
 
@@ -66,4 +73,18 @@ open class SendTransaction (peerUrl: String,
             withTimeout(timeout) { it.await() }
         }
     }
+}
+
+open class Query (peerUrl: String,
+                  telemetryUrl: String,
+                  private val admin: AccountId,
+                  private val keyPair: KeyPair) {
+
+    private val client = AdminIroha2Client(URL(peerUrl), URL(telemetryUrl), log = true)
+
+    suspend fun findAllAccounts(queryFilter: GenericValuePredicateBox<ValuePredicate>? = null) = QueryBuilder
+        .findAllAccounts(queryFilter)
+        .account(admin)
+        .buildSigned(keyPair)
+        .let { client.sendQuery(it) }
 }
