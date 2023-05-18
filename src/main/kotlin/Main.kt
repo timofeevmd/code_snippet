@@ -1,9 +1,9 @@
 import jp.co.soramitsu.iroha2.*
+import jp.co.soramitsu.iroha2.generated.datamodel.Value
 import jp.co.soramitsu.iroha2.generated.datamodel.account.AccountId
-import jp.co.soramitsu.iroha2.generated.datamodel.predicate.GenericValuePredicateBox
-import jp.co.soramitsu.iroha2.generated.datamodel.predicate.value.ValuePredicate
-import jp.co.soramitsu.iroha2.query.QueryBuilder
+import jp.co.soramitsu.iroha2.generated.datamodel.name.Name
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.net.URL
 import java.security.KeyPair
 
@@ -16,21 +16,31 @@ fun main(args: Array<String>): Unit = runBlocking{
 
     val query = Query(peerUrl, telemetryUrl, admin, adminKeyPair)
 
-    query.findAllDomains()
-        .also { println("ALL DOMAINS: ${it.map { d -> d.id.asString() }}") }
+    val domain = "domain_${System.currentTimeMillis()}"
+    query.registerDomain(domain).also { println("DOMAIN $domain CREATED") }
 
 }
 
 open class Query (peerUrl: String,
                     telemetryUrl: String,
                     private val admin: AccountId,
-                    private val keyPair: KeyPair) {
+                    private val keyPair: KeyPair,
+                    private val timeout: Long = 10000) {
 
     private val client = AdminIroha2Client(URL(peerUrl), URL(telemetryUrl), log = true)
 
-    suspend fun findAllDomains(queryFilter: GenericValuePredicateBox<ValuePredicate>? = null) = QueryBuilder
-        .findAllDomains(queryFilter)
-        .account(admin)
-        .buildSigned(keyPair)
-        .let { client.sendQuery(it) }
+    suspend fun registerDomain(
+        id: String,
+        metadata: Map<Name, Value> = mapOf(),
+        admin: AccountId = this.admin,
+        keyPair: KeyPair = this.keyPair
+    ) {
+        client.sendTransaction {
+            account(admin)
+            this.registerDomain(id.asDomainId(), metadata)
+            buildSigned(keyPair)
+        }.also {
+            withTimeout(timeout) { it.await() }
+        }
+    }
 }
