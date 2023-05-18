@@ -41,8 +41,18 @@ fun main(args: Array<String>): Unit = runBlocking{
     sendTransaction.registerAsset(joeAsset, AssetValue.Quantity(100))
         .also { println("ASSET $joeAsset CREATED") }
 
-    query.findAllAssets()
-        .also { println("ALL ASSETS: ${it.map { a -> a.id.asString() }}") }
+    val carl = "carl_${System.currentTimeMillis()}$ACCOUNT_ID_DELIMITER$domain"
+    sendTransaction.registerAccount(carl, listOf())
+        .also { println("ACCOUNT $carl CREATED") }
+
+    val carlAsset = "$assetDefinition$ASSET_ID_DELIMITER$carl"
+    sendTransaction.registerAsset(carlAsset, AssetValue.Quantity(0))
+        .also { println("ASSET $carlAsset CREATED") }
+
+    sendTransaction.transferAsset(joeAsset, 10, carlAsset, joe.asAccountId(), joeKeyPair)
+        .also { println("$joe TRANSFERRED FROM $joeAsset TO $carlAsset: 10") }
+    sendTransaction.getAccountAmount(joe, joeAsset).also { println("$joeAsset BALANCE: $it") }
+    sendTransaction.getAccountAmount(carl, carlAsset).also { println("$carlAsset BALANCE: $it") }
 
 }
 
@@ -115,6 +125,33 @@ open class SendTransaction (peerUrl: String,
         }.also {
             withTimeout(timeout) { it.await() }
         }
+    }
+
+    suspend fun transferAsset(
+        from: String,
+        value: Int,
+        to: String,
+        admin: AccountId = this.admin,
+        keyPair: KeyPair = this.keyPair
+    ) {
+        client.sendTransaction {
+            account(admin)
+            this.transferAsset(from.asAssetId(), value, to.asAssetId())
+            buildSigned(keyPair)
+        }.also {
+            withTimeout(timeout) { it.await() }
+        }
+    }
+
+    suspend fun getAccountAmount(accountId: String, assetId: String): Long {
+        return QueryBuilder.findAccountById(accountId.asAccountId())
+            .account(admin)
+            .buildSigned(keyPair)
+            .let { query ->
+                client.sendQuery(query).assets[assetId.asAssetId()]?.value
+            }.let { value ->
+                value?.cast<AssetValue.Quantity>()?.u32
+            } ?: throw RuntimeException("NOT FOUND")
     }
 }
 
