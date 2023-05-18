@@ -1,0 +1,32 @@
+# Compiled files
+*.class
+*.jar
+*.war
+*.ear
+*.so
+*.dll
+*.exe
+*.ko
+*.obj
+*.o
+
+# IDE-specific files
+.idea/
+.gradle/
+build/
+
+# Gradle specific files
+.gradle
+.gradle/
+.gradle.kts
+
+# Kotlin specific files
+build/
+out/
+*.iml
+
+# macOS specific files
+.DS_Store
+
+# Mac M1 specific files
+.build/
